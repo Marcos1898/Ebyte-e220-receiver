@@ -80,7 +80,7 @@ void setup()
 
   configuration.OPTION.subPacketSetting = SPS_200_00;                  // Packet size
   configuration.OPTION.RSSIAmbientNoise = RSSI_AMBIENT_NOISE_DISABLED; // Need to send special command
-  configuration.OPTION.transmissionPower = POWER_10;                   // Device power
+  configuration.OPTION.transmissionPower = POWER_22;                   // Device power
 
   configuration.TRANSMISSION_MODE.enableRSSI = RSSI_ENABLED;                       // Enable RSSI info
   configuration.TRANSMISSION_MODE.fixedTransmission = FT_FIXED_TRANSMISSION; // Enable repeater mode
