@@ -135,7 +135,9 @@ void loop()
       Serial.print(message.dht11.humidity);
       Serial.println("%");
       Serial.print("RSSI: ");
-      Serial.println(rsc.rssi, DEC);
+      int rssi = (int) rsc.rssi;
+      int rssi_dbm = - (256 - rssi);
+      Serial.println(rssi_dbm);
       Serial.println("-----------------------------------");
       Serial.println();
 
