@@ -22,11 +22,15 @@
 #include "LoRaUtils.h"
 #include "structures.h"
 #include "LoRaSettings.h"
+#include <SoftwareSerial.h>
+#include <TinyGPS++.h>
 
 // -------------------------------------------------
 #define FREQUENCY_868
 // ---------- esp32 pins --------------
 LoRa_E220 e220ttl(&Serial2, 18, 21, 19); //  RX AUX M0 M1
+SoftwareSerial GPSSerial(22, 23);        // RX en GPIO22, TX en GPIO23
+TinyGPSPlus gps;
 const int BOARD_ID = 54321;
 const int pin_led = 4;
 
@@ -34,6 +38,7 @@ void setup()
 {
   pinMode(pin_led, OUTPUT);
   Serial.begin(9600);
+  GPSSerial.begin(9600);
   while (!Serial)
   {
   };
@@ -79,15 +84,57 @@ void print_message(Message message, ResponseStructContainer rsc)
   Serial.println();
 }
 
+GPSData read_gps() {
+    // Inicializar un objeto GPSData con valores predeterminados
+    GPSData gps_data = {
+        .lat = -200,
+        .lng = -200,
+        .speed = 0,
+        .date = {0, 0, 0},
+        .time = {0, 0, 0}
+    };
 
+    // Leer datos del GPS
+    while (GPSSerial.available() > 0) {
+        gps.encode(GPSSerial.read());
+    }
+
+    // Verifica si la localización es válida
+    if (gps.location.isValid()) {
+        // Obtiene los datos GPS
+        gps_data.lat = gps.location.lat();
+        gps_data.lng = gps.location.lng();
+        gps_data.speed = gps.speed.kmph();
+        gps_data.date = {gps.date.day(), gps.date.month(), gps.date.year()};
+        gps_data.time = {gps.time.hour(), gps.time.minute(), gps.time.second()};
+    } else {
+        Serial.println("Localización no válida.");
+    }
+
+    return gps_data;
+}
+
+
+unsigned long previousMillis = 0; // Almacena el último tiempo en que se ejecutó read_gps()
+const long interval = 1000;       // Intervalo de 1 segundo (1000 ms)
+GPSData last_gps;
 void loop()
 {
+  // Control de tiempo para ejecutar read_gps() cada segundo
+  unsigned long currentMillis = millis();
+  if (currentMillis - previousMillis >= interval)
+  {
+    previousMillis = currentMillis; // Actualiza el tiempo
+    last_gps = read_gps();                     // Llama a la función cada 1 segundo
+  }
+
+  // Verifica si hay datos disponibles en e220ttl
   if (e220ttl.available() > 1)
   {
-    // read the String messageI
+    // Lee el mensaje y su RSSI
     ResponseStructContainer rsc = e220ttl.receiveMessageRSSI(sizeof(Message));
 
-    // Is something goes wrong print error
+    // Si ocurre algún error, imprime el mensaje de error
     if (rsc.status.code != 1)
     {
       Serial.println(rsc.status.getResponseDescription());
@@ -96,8 +143,8 @@ void loop()
     {
       Serial.println(rsc.status.getResponseDescription());
       struct Message message = *(Message *)rsc.data;
-      print_message(message, rsc);
-      digitalWrite(pin_led, !digitalRead(pin_led));
+      print_message(message, rsc);                  // Llama a la función para imprimir el mensaje
+      digitalWrite(pin_led, !digitalRead(pin_led)); // Cambia el estado del LED
     }
   }
 }
