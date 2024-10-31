@@ -25,6 +25,7 @@
 #include "LoRaSettings.h"
 #include <SoftwareSerial.h>
 #include <TinyGPS++.h>
+#include "./MqttClient/MqttClient.h"
 
 // -------------------------------------------------
 #define FREQUENCY_868
@@ -32,10 +33,13 @@
 LoRa_E220 e220ttl(&Serial2, 18, 21, 19); //  RX AUX M0 M1
 SoftwareSerial GPSSerial(22, 23);        // RX en GPIO22, TX en GPIO23
 TinyGPSPlus gps;
+MqttClient mqtt_client("raspberryisaac.ddns.net");
+
+
 const int BOARD_ID = 54321;
 const int pin_led = 4;
-const char *WIFI_SSID = "DIGIFIBRA-ttZU";
-const char *WIFI_PASSWORD = "maraljo1";
+const char *WIFI_SSID = "Iphone de marcos";
+const char *WIFI_PASSWORD = "marcos1234";
 
 void wifi_setup()
 {
@@ -79,28 +83,46 @@ void setup()
     Serial.println(c.status.getResponseDescription());
   }
   wifi_setup();
+  mqtt_client.connect();
 }
 
-void print_message(Message message, ResponseStructContainer rsc)
+int get_rssi(byte byte_rssi){
+  int rssi = (int)byte_rssi;
+  int rssi_dbm = -(256 - rssi);
+  return rssi_dbm;
+}
+
+void print_message(Message message, int rssi_dbm, GPSData gps)
 {
-  Serial.println("-----------NUEVO MENSAJE------------");
+  Serial.println("=========NUEVO MENSAJE==============");
+  Serial.println("-----------mensaje------------");
   Serial.print("Número de secuencia: ");
   Serial.println(message.seq_n);
-  Serial.print("ID placa: ");
-  Serial.println(message.id);
-  Serial.print("Estado LED: ");
-  Serial.println(message.enable);
-  Serial.print("Temperatura: ");
-  Serial.print(message.dht11.temperature);
-  Serial.print("º   Humedad: ");
-  Serial.print(message.dht11.humidity);
-  Serial.println("%");
+  // Serial.print("ID placa: ");
+  // Serial.println(message.id);
+  // Serial.print("Estado LED: ");
+  // Serial.println(message.enable);
+  // Serial.print("Temperatura: ");
+  // Serial.print(message.dht11.temperature);
+  // Serial.print("º   Humedad: ");
+  // Serial.print(message.dht11.humidity);
+  // Serial.println("%");
   Serial.print("RSSI: ");
-  int rssi = (int)rsc.rssi;
-  int rssi_dbm = -(256 - rssi);
   Serial.print(rssi_dbm);
   Serial.println(" dBm");
-  Serial.println("-----------------------------------");
+  Serial.println("-----------localizacion------------");
+  if (gps.lat == -200 || gps.lng == -200)
+  {
+    Serial.println("La localización no es válida");
+  }
+  else
+  {
+    Serial.print("Lat: ");
+    Serial.println(gps.lat);
+    Serial.print("Lng: ");
+    Serial.println(gps.lng);
+  }
+  Serial.println("======================================");
   Serial.println();
 }
 
@@ -131,26 +153,15 @@ GPSData read_gps()
     gps_data.time = {gps.time.hour(), gps.time.minute(), gps.time.second()};
   }
   else
-  {
-    Serial.println("Localización no válida.");
-  }
 
-  return gps_data;
+    return gps_data;
 }
 
-unsigned long previousMillis = 0; // Almacena el último tiempo en que se ejecutó read_gps()
-const long interval = 1000;       // Intervalo de 1 segundo (1000 ms)
 GPSData last_gps;
 void loop()
 {
-  // Control de tiempo para ejecutar read_gps() cada segundo
-  unsigned long currentMillis = millis();
-  if (currentMillis - previousMillis >= interval)
-  {
-    previousMillis = currentMillis; // Actualiza el tiempo
-    last_gps = read_gps();          // Llama a la función cada 1 segundo
-  }
-
+  mqtt_client.loop();
+  last_gps = read_gps();
   // Verifica si hay datos disponibles en e220ttl
   if (e220ttl.available() > 1)
   {
@@ -164,9 +175,11 @@ void loop()
     }
     else
     {
+      int rssi_dbm = get_rssi(rsc.rssi);
       Serial.println(rsc.status.getResponseDescription());
       struct Message message = *(Message *)rsc.data;
-      print_message(message, rsc);                  // Llama a la función para imprimir el mensaje
+      print_message(message, rssi_dbm, last_gps);
+      mqtt_client.send_message(message,last_gps, rssi_dbm);                // Llama a la función para imprimir el mensaje
       digitalWrite(pin_led, !digitalRead(pin_led)); // Cambia el estado del LED
     }
   }
