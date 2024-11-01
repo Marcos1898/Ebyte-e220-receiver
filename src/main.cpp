@@ -35,11 +35,10 @@ SoftwareSerial GPSSerial(22, 23);        // RX en GPIO22, TX en GPIO23
 TinyGPSPlus gps;
 MqttClient mqtt_client("raspberryisaac.ddns.net");
 
-
 const int BOARD_ID = 54321;
 const int pin_led = 4;
-const char *WIFI_SSID = "Iphone de marcos";
-const char *WIFI_PASSWORD = "marcos1234";
+const char *WIFI_SSID = "";
+const char *WIFI_PASSWORD = "";
 
 void wifi_setup()
 {
@@ -86,7 +85,8 @@ void setup()
   mqtt_client.connect();
 }
 
-int get_rssi(byte byte_rssi){
+int get_rssi(byte byte_rssi)
+{
   int rssi = (int)byte_rssi;
   int rssi_dbm = -(256 - rssi);
   return rssi_dbm;
@@ -129,12 +129,7 @@ void print_message(Message message, int rssi_dbm, GPSData gps)
 GPSData read_gps()
 {
   // Inicializar un objeto GPSData con valores predeterminados
-  GPSData gps_data = {
-      .lat = -200,
-      .lng = -200,
-      .speed = 0,
-      .date = {0, 0, 0},
-      .time = {0, 0, 0}};
+  GPSData gps_data;
 
   // Leer datos del GPS
   while (GPSSerial.available() > 0)
@@ -142,10 +137,9 @@ GPSData read_gps()
     gps.encode(GPSSerial.read());
   }
 
-  // Verifica si la localización es válida
-  if (gps.location.isValid())
+  // Verifica si la localización es válida comparando con 0
+  if (gps.location.lat() != 0 && gps.location.lng() != 0)  // Compara latitud y longitud con 0
   {
-    // Obtiene los datos GPS
     gps_data.lat = gps.location.lat();
     gps_data.lng = gps.location.lng();
     gps_data.speed = gps.speed.kmph();
@@ -153,9 +147,18 @@ GPSData read_gps()
     gps_data.time = {gps.time.hour(), gps.time.minute(), gps.time.second()};
   }
   else
+  {
+    // Valores predeterminados para indicar que los datos GPS no son válidos
+    gps_data.lat = -200;
+    gps_data.lng = -200;
+    gps_data.speed = 0;
+    gps_data.date = {0, 0, 0};
+    gps_data.time = {0, 0, 0};
+  }
 
-    return gps_data;
+  return gps_data;
 }
+
 
 GPSData last_gps;
 void loop()
@@ -179,8 +182,8 @@ void loop()
       Serial.println(rsc.status.getResponseDescription());
       struct Message message = *(Message *)rsc.data;
       print_message(message, rssi_dbm, last_gps);
-      mqtt_client.send_message(message,last_gps, rssi_dbm);                // Llama a la función para imprimir el mensaje
-      digitalWrite(pin_led, !digitalRead(pin_led)); // Cambia el estado del LED
+      mqtt_client.send_message(message, last_gps, rssi_dbm); // Llama a la función para imprimir el mensaje
+      digitalWrite(pin_led, !digitalRead(pin_led));          // Cambia el estado del LED
     }
   }
 }
